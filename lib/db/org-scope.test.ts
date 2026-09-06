@@ -1,6 +1,13 @@
+import { sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
-import { organizationUserWhere, requireOrganizationId } from "./org-scope";
+import { authMembers, authUsers } from "@/db/schema";
+import {
+  organizationScopeWhere,
+  organizationUserWhere,
+  requireOrganizationId,
+} from "./org-scope";
 
 describe("organization scope", () => {
   const companyA = {
@@ -14,6 +21,47 @@ describe("organization scope", () => {
     expect(() => organizationUserWhere(companyA, "company-b")).toThrow(
       "Organization scope does not match the current session",
     );
+  });
+
+  it("cannot read another organization's rows", () => {
+    const where = organizationUserWhere(companyA);
+    const query = new PgDialect().sqlToQuery(sql`select * from ${authUsers} where ${where}`);
+
+    expect(query.params).toContain("company-a");
+    expect(query.params).not.toContain("company-b");
+  });
+
+  it("allows an individual learner without a membership row", () => {
+    const where = organizationUserWhere({
+      userId: "individual",
+      role: "learner",
+      organizationId: null,
+    });
+    const query = new PgDialect().sqlToQuery(sql`select * from ${authUsers} where ${where}`);
+
+    expect(query.params).toEqual(["individual"]);
+    expect(query.sql).not.toContain('"auth"."members"');
+  });
+
+  it("cannot read organization data without a membership row", () => {
+    expect(() =>
+      organizationScopeWhere(
+        { organizationId: authMembers.organizationId },
+        { userId: "individual", role: "learner", organizationId: null },
+      ),
+    ).toThrow("An organization is required for this role");
+  });
+
+  it("cannot read another individual learner's row", () => {
+    const where = organizationUserWhere({
+      userId: "individual-a",
+      role: "learner",
+      organizationId: null,
+    });
+    const query = new PgDialect().sqlToQuery(sql`select * from ${authUsers} where ${where}`);
+
+    expect(query.params).toEqual(["individual-a"]);
+    expect(query.params).not.toContain("individual-b");
   });
 
   it("limits a learner to their own user row", () => {
