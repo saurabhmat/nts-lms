@@ -2,13 +2,13 @@
 
 ## Infrastructure Readiness
 
-- [ ] Create the Coolify project resource `nts-lms-app` in the `production` environment.
-- [ ] Connect the `nts-lms-github` GitHub App source to repository `nts-lms`, branch `main`.
+- [x] Create the Coolify project resource `nts-lms-app` in the `production` environment.
+- [x] Connect the `nts-lms-github` GitHub App source to repository `nts-lms`, branch `main`.
 - [ ] Confirm Nixpacks auto-detects the Next.js app and monitor build memory on the shared 8 GB VPS.
-- [ ] Configure `DATABASE_URL` using the private PostgreSQL service `postgresql-database-nts-lms-db` at internal hostname `rzqdhogoeqadib95ishvkwd0`, database `postgres`, user `postgres`, port `5432`.
-- [ ] Configure a unique `BETTER_AUTH_SECRET` and the final `BETTER_AUTH_URL` in Coolify before the first production deploy.
-- [ ] Configure `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME` for bucket `nts-lms-content`.
-- [ ] Configure `BREVO_API_KEY` in Coolify. Do not commit production secrets or create a production `.env` file.
+- [x] Configure `DATABASE_URL` using the private PostgreSQL service `postgresql-database-nts-lms-db` at internal hostname `rzqdhogoeqadib95ishvkwd0`, database `postgres`, user `postgres`, port `5432`.
+- [x] Configure a unique `BETTER_AUTH_SECRET` and the final `BETTER_AUTH_URL` in Coolify before the first production deploy.
+- [x] Configure `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME` for bucket `nts-lms-content`.
+- [ ] Configure `BREVO_API_KEY` in Coolify later when Brevo is ready. Do not commit production secrets or create a production `.env` file.
 - [ ] Configure the production domain after the customer provides it, then set Cloudflare DNS, SSL, secure cookies, and allowed origins.
 
 ## Application Requirements
@@ -24,7 +24,7 @@
 - [ ] Start local Docker Postgres and run migrations locally.
 - [ ] Verify schema, tests, seed data, and a clean local boot before deployment.
 - [ ] Add `npm run db:migrate` to the Coolify build/pre-deploy migration step.
-- [ ] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
+- [x] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
 - [ ] Run production migrations only after local verification. Production is currently empty, so destructive migrations are acceptable until content is loaded around 12 September 2026.
 - [ ] Smoke-test login, database health, R2 uploads/downloads, presigned URL ownership, email flows, and the production deployment.
 

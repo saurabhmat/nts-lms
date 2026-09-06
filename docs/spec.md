@@ -31,6 +31,7 @@
 - Endpoint: `https://11644e77364f0ced57d6cbcee03d005e.r2.cloudflarestorage.com`.
 - Region: `auto`.
 - Configure these production variables in Coolify: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`.
+- The Coolify snapshot confirms the production database, Better Auth, and R2 variables are enabled for both buildtime and runtime. Preview has corresponding variables configured separately.
 - Object keys:
   - `chapters/{chapterId}/notes/{uuid}-{filename}`
   - `submissions/{userId}/{chapterId}/{uuid}-{filename}`
@@ -43,6 +44,7 @@
 - Email provider: Brevo API, not SMTP.
 - Sender domain: pending verification.
 - Production variable: `BREVO_API_KEY` in Coolify.
+- Brevo is intentionally deferred and is not required for the current deployment checkpoint.
 - Required templates: invitation, password reset, and later chapter unlocked. Implement the templates in the repository rather than relying on Brevo's template UI.
 
 ## Backups
