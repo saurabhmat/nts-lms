@@ -9,17 +9,21 @@ export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  let signedIn = true;
+  let role: string | undefined;
+  let failed = false;
   try {
-    await auth.api.signInEmail({ body: { email, password }, headers: await headers() });
+    const result = await auth.api.signInEmail({
+      body: { email, password },
+      headers: await headers(),
+    });
+    role = result.user.role;
   } catch {
-    signedIn = false;
+    failed = true;
   }
 
-  if (!signedIn) {
+  if (failed) {
     redirect("/login?error=1");
   }
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  redirect(session?.user.role === "master" ? "/admin" : "/");
+  redirect(role === "master" ? "/admin" : "/");
 }
