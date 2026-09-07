@@ -273,7 +273,23 @@ export const courseSettings = pgTable("course_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Invitations for additional `master`-role admin accounts. Deliberately separate from
+// auth.invitations: that table (and Better Auth's acceptInvitation flow) is organization-scoped
+// by design, and a master admin has no organization -- see the org-scope rules in
+// lib/db/org-scope.ts and the "master has no membership row" rule in docs/spec.md.
+export const adminInvitations = pgTable("admin_invitations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  invitedBy: text("invited_by").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+});
+
 export type Organization = typeof authOrganizations.$inferSelect;
 export type User = typeof authUsers.$inferSelect;
 export type Chapter = typeof chapters.$inferSelect;
+export type AdminInvitation = typeof adminInvitations.$inferSelect;
 export type Question = typeof questions.$inferSelect;

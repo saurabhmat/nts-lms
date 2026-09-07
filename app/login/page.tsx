@@ -1,11 +1,13 @@
+import Link from "next/link";
+
 import { login } from "./actions";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, reset } = await searchParams;
 
   const inputClass =
     "mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
@@ -24,6 +26,12 @@ export default async function LoginPage({
         </div>
 
         <h1 className="mt-6 text-lg font-semibold tracking-tight text-slate-900">Sign in</h1>
+
+        {reset && (
+          <p className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            Password updated. Sign in with your new password.
+          </p>
+        )}
 
         {error && (
           <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -46,9 +54,14 @@ export default async function LoginPage({
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+                Password
+              </label>
+              <Link href="/forgot-password" className="text-xs font-medium text-blue-600 hover:text-blue-700">
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               name="password"
@@ -65,6 +78,13 @@ export default async function LoginPage({
             Sign in
           </button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-slate-500">
+          Setting up for the first time?{" "}
+          <Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">
+            Create an admin account
+          </Link>
+        </p>
       </div>
     </main>
   );

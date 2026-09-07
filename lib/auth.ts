@@ -32,6 +32,16 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    // TODO: swap for a real Brevo send once BREVO_API_KEY is configured (see docs/infrastructure.md).
+    // Until then the reset link is logged so the flow is fully testable locally.
+    //
+    // Build our own URL from `token` rather than using the provided `url` -- the default
+    // points at Better Auth's own /api/auth/reset-password/:token redirect-hop endpoint,
+    // not directly at our app/reset-password/[token] page.
+    sendResetPassword: async ({ user, token }) => {
+      const url = `${process.env.BETTER_AUTH_URL}/reset-password/${token}`;
+      console.log(`[auth] Password reset link for ${user.email}: ${url}`);
+    },
   },
   plugins: [
     organization({

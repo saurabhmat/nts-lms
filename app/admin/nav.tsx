@@ -7,6 +7,7 @@ import {
   type LucideIcon,
   Settings,
   BookOpen,
+  ShieldCheck,
   Upload,
   Users,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { usePathname } from "next/navigation";
 
 const sections: { href: string; label: string; icon: LucideIcon; enabled: boolean }[] = [
   { href: "/admin/companies", label: "Companies", icon: Building2, enabled: true },
+  { href: "/admin/team", label: "Team", icon: ShieldCheck, enabled: true },
   { href: "/admin/learners", label: "Learners", icon: Users, enabled: false },
   { href: "/admin/course", label: "Course", icon: BookOpen, enabled: false },
   { href: "/admin/questions", label: "Questions", icon: ListChecks, enabled: false },
