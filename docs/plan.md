@@ -21,8 +21,8 @@
 
 ## Migration and Deployment Workflow
 
-- [ ] Start local Docker Postgres and run migrations locally.
-- [ ] Verify schema, tests, seed data, and a clean local boot before deployment.
+- [x] Run local Postgres and apply migrations locally. Docker/Podman/Colima remain unavailable in this environment; used Homebrew `postgresql@17` instead (database `nts_lms`, connected via `.env.local`). `drizzle-kit check` reports no drift and all 18 tables (11 public + 7 `auth`) exist.
+- [x] Verify schema, tests, and a clean local boot before deployment. `npm test` passes (8/8 org-isolation tests); `npm run dev` boots and `/api/health` returns 200 against the local database. Seed data still outstanding — no seed script exists yet.
 - [ ] Add `npm run db:migrate` to the Coolify build/pre-deploy migration step.
 - [x] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
 - [ ] Run production migrations only after local verification. Production is currently empty, so destructive migrations are acceptable until content is loaded around 12 September 2026.
@@ -46,10 +46,10 @@
 
 ## Admin & Identity (next group)
 
-- [ ] Start local Docker Postgres and apply the 12-table migration before adding organization-scoped admin queries.
+- [x] Local Postgres is running with the migration applied (18 tables); organization-scoped admin queries can now be built against it.
 - [ ] Implement master organization list/create/detail flows through the shared session-derived scope boundary.
 - [ ] Implement company-admin learner roster and organization membership checks.
 - [ ] Implement invitation creation, expiry, acceptance, resend, and duplicate handling.
 - [ ] Add tests for company A/B isolation across organization and learner queries.
 
-Current blocker: Docker, Podman, Colima, `psql`, and a local PostgreSQL listener are unavailable in this environment, so the migration has not been run locally.
+Resolved: Docker, Podman, and Colima remain unavailable, but Homebrew's `postgresql@17` service is installed and running locally, with `psql` available. The `nts_lms` database was created and both migrations applied against it — schema, tests, and a local boot are all verified.
