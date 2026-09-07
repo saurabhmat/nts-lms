@@ -47,9 +47,11 @@
 ## Admin & Identity (next group)
 
 - [x] Local Postgres is running with the migration applied (18 tables); organization-scoped admin queries can now be built against it.
-- [ ] Implement master organization list/create/detail flows through the shared session-derived scope boundary.
-- [ ] Implement company-admin learner roster and organization membership checks.
-- [ ] Implement invitation creation, expiry, acceptance, resend, and duplicate handling.
-- [ ] Add tests for company A/B isolation across organization and learner queries.
+- [x] Implement master organization list/create/detail flows through the shared session-derived scope boundary. `/admin/companies` (list + create) and `/admin/companies/[orgId]` (detail + roster + bulk-invite) are built as Server Components backed by `lib/admin/companies.ts`, gated by `app/admin/layout.tsx` (redirects to `/login` or `/403`). Company creation and invitations write directly via Drizzle rather than Better Auth's `organization` plugin endpoints, because that plugin always adds the creator/inviter as an `auth.members` row — which would violate the one-membership-per-user rule and the "master has no membership row" design rule the schema already enforces.
+- [ ] Implement company-admin learner roster and organization membership checks. Deferred: `/team/*` routes for the `company_admin` role are not built yet.
+- [x] Implement invitation creation and duplicate handling (an email already a member, or with a pending invite, is skipped and reported). Deferred: expiry sweep/cleanup, resend, and the `/invite/[token]` acceptance page are not built yet — invitations are created with a 7-day expiry but nothing currently consumes them.
+- [x] Add tests for company A/B isolation across organization and learner queries. `lib/admin/companies.test.ts` is a live-database integration suite (seeds two orgs directly, asserts a roster query never crosses organizations, and that invitation dedupe is scoped per-organization).
+
+Also fixed while unblocking this group: added a seed script (`npm run db:seed`, `db/seed.ts`) to create/promote a local master user, since email/password auth had never actually been exercised end-to-end before. That surfaced two more pre-existing gaps, now fixed: (1) the installed Better Auth version requires an `issuer` column on `auth.accounts` that the schema was missing (migration `0002_lazy_shocker.sql`, safe since the table was empty); (2) `drizzle.config.ts` loaded `.env` via `dotenv/config`, but this project only has `.env.local`, so `npm run db:migrate`/`db:seed` never actually had `DATABASE_URL` when run standalone — fixed to load `.env.local` explicitly. The whole flow was verified against the real local Postgres via the actual HTTP wire protocol (sign-in, both admin pages, real form submissions including the no-JS server-action fallback), not just unit tests.
 
 Resolved: Docker, Podman, and Colima remain unavailable, but Homebrew's `postgresql@17` service is installed and running locally, with `psql` available. The `nts_lms` database was created and both migrations applied against it — schema, tests, and a local boot are all verified.

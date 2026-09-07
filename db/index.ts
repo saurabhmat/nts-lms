@@ -3,8 +3,6 @@ import postgres from "postgres";
 
 import * as schema from "./schema";
 
-const databaseUrl = process.env.DATABASE_URL;
-
 export function getDb() {
-  return drizzle(postgres(databaseUrl ?? "", { prepare: false }), { schema });
+  return drizzle(postgres(process.env.DATABASE_URL ?? "", { prepare: false }), { schema });
 }
