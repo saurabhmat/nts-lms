@@ -66,7 +66,7 @@ export async function getCompanyDetail(session: SessionScope, organizationId: st
       name: authUsers.name,
       email: authUsers.email,
       onboardingState: authUsers.onboardingState,
-      memberRole: authMembers.role,
+      applicationRole: authUsers.role,
     })
     .from(authMembers)
     .innerJoin(authUsers, eq(authUsers.id, authMembers.userId))
@@ -84,13 +84,22 @@ export async function getCompanyDetail(session: SessionScope, organizationId: st
   return { organization, roster, pendingInvitations };
 }
 
-export async function inviteLearners(
-  session: SessionScope,
+// Unguarded core, shared by both the master-only invite functions below and the
+// company_admin's own-org invite in lib/team/roster.ts. Each caller is responsible for
+// its own permission check before calling this -- in particular, only the master-only
+// wrappers here may ever pass applicationRole "company_admin"; the company_admin-facing
+// caller always hardcodes "learner" so a company admin can never invite another admin.
+//
+// `role` on the authInvitations row is repurposed here to carry this intended
+// application-level role (learner | company_admin) rather than Better Auth's own
+// org-membership role concept -- consistent with the rest of this module already
+// bypassing the organization plugin's endpoints in favor of direct writes.
+export async function inviteIntoOrganization(
   organizationId: string,
   inviterId: string,
   emails: string[],
+  applicationRole: "learner" | "company_admin",
 ) {
-  assertMaster(session);
   const db = getDb();
 
   const normalized = [...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
@@ -135,7 +144,7 @@ export async function inviteLearners(
       id: randomUUID(),
       organizationId,
       email,
-      role: "member",
+      role: applicationRole,
       status: "pending",
       expiresAt,
       inviterId,
@@ -145,4 +154,45 @@ export async function inviteLearners(
   }
 
   return { invited, skipped };
+}
+
+export async function inviteLearners(
+  session: SessionScope,
+  organizationId: string,
+  inviterId: string,
+  emails: string[],
+) {
+  assertMaster(session);
+  return inviteIntoOrganization(organizationId, inviterId, emails, "learner");
+}
+
+export async function inviteCompanyOwner(
+  session: SessionScope,
+  organizationId: string,
+  inviterId: string,
+  email: string,
+) {
+  assertMaster(session);
+  return inviteIntoOrganization(organizationId, inviterId, [email], "company_admin");
+}
+
+export async function setMemberApplicationRole(
+  session: SessionScope,
+  organizationId: string,
+  userId: string,
+  role: "learner" | "company_admin",
+) {
+  assertMaster(session);
+  const db = getDb();
+
+  const [member] = await db
+    .select({ id: authMembers.id })
+    .from(authMembers)
+    .where(and(eq(authMembers.organizationId, organizationId), eq(authMembers.userId, userId)))
+    .limit(1);
+  if (!member) {
+    throw new Error("This user is not a member of that organization");
+  }
+
+  await db.update(authUsers).set({ role }).where(eq(authUsers.id, userId));
 }

@@ -4,8 +4,8 @@ import { LogOut } from "lucide-react";
 
 import { auth } from "@/lib/auth";
 import { getSessionScope } from "@/lib/session";
+import { signOutAction } from "@/lib/session-actions";
 
-import { signOutAction } from "./actions";
 import { AdminNav } from "./nav";
 
 function initialsFor(name: string | undefined) {

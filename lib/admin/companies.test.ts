@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { getDb } from "@/db";
-import { authMembers, authOrganizations, authUsers } from "@/db/schema";
+import { authInvitations, authMembers, authOrganizations, authUsers } from "@/db/schema";
 import type { SessionScope } from "@/lib/db/org-scope";
 
-import { getCompanyDetail, inviteLearners, listCompanies } from "./companies";
+import { getCompanyDetail, inviteCompanyOwner, inviteLearners, listCompanies } from "./companies";
 
 const db = getDb();
 const suffix = randomUUID().slice(0, 8);
@@ -100,5 +100,25 @@ describe("company admin queries (integration)", () => {
     const result = await inviteLearners(master, orgBId, masterUserId, [email]);
 
     expect(result.invited).toEqual([email]);
+  });
+
+  it("marks a company-owner invitation with the company_admin application role", async () => {
+    const email = `owner-${suffix}@example.com`;
+
+    const result = await inviteCompanyOwner(master, orgAId, masterUserId, email);
+    expect(result.invited).toEqual([email]);
+
+    const [invitation] = await db
+      .select({ role: authInvitations.role })
+      .from(authInvitations)
+      .where(eq(authInvitations.email, email));
+    expect(invitation.role).toBe("company_admin");
+  });
+
+  it("rejects a non-master session trying to invite a company owner", async () => {
+    const companyAdmin: SessionScope = { userId: userAId, role: "company_admin", organizationId: orgAId };
+    await expect(
+      inviteCompanyOwner(companyAdmin, orgAId, userAId, "someone@example.com"),
+    ).rejects.toThrow("Only the master role can manage companies");
   });
 });

@@ -67,3 +67,20 @@ Not in the original spec (§5 lists no `/register` and no team-admin concept), b
 - [x] `lib/admin/team.ts` + `lib/admin/team.test.ts` — invite dedupe (already-admin / already-pending), non-master rejection, and accept-then-promote, all against the real local database.
 
 All four flows (register with a wrong/right code, team invite → accept → promotion, forgot-password → reset → new password works / old one doesn't) were verified against local Postgres via the real HTTP wire protocol, not just unit tests.
+
+## Closing the company-learner invitation loop, and a real company-admin view
+
+Another deliberate deviation from spec §2, requested directly: spec originally scoped `company_admin` as "read-only over learners in their own organisation." That's now expanded so a company admin can invite their own learners too.
+
+- [x] `/invite/[token]` — company learners can now actually accept an invitation (previously only the row existed; nothing consumed it). Writes the `auth.members` row directly rather than calling `auth.api.acceptInvitation`, for the same reason described below.
+- [x] `/team` — real company_admin view: own org's roster, pending invitations, and an invite-learners form. Uses `organizationUserWhere` from `lib/db/org-scope.ts` in real code for the first time (previously only exercised by its own unit tests) — proven with a live-database isolation test (`lib/team/roster.test.ts`) that a company admin can never see another company's learners.
+- [x] Master can now invite someone directly as a company owner (`inviteCompanyOwner` in `lib/admin/companies.ts`) rather than the old invite-as-learner-then-manually-promote path. The intended role rides on `authInvitations.role` (repurposed to carry our application role rather than Better Auth's org-role concept, since we already bypass that system) and is applied on acceptance in `lib/invitations.ts`.
+- [x] A company admin can invite further learners into their own org from `/team` (`inviteLearnersIntoMyOrganization` in `lib/team/roster.ts`) — but can **never** invite another company_admin: that function hardcodes the role to `"learner"`, with a dedicated test (`lib/team/roster.test.ts`) asserting the invitation row it creates is never anything else. Privilege escalation here would mean a company admin minting peer admins for their own org unchecked — deliberately not exposed.
+- [x] Added the master-only promote/demote toggle on `/admin/companies/[orgId]`'s roster (`setMemberApplicationRole`) that this whole loop depends on — there was previously no way to create a `company_admin` account at all.
+- [x] Login now redirects `company_admin` to `/team` (previously fell through to the bare homepage, since `/team` didn't exist yet).
+
+Two more bugs found and fixed while wiring this up:
+1. `db/index.ts`'s `getDb()` opened a brand-new Postgres connection pool on every call instead of reusing one. Fine with few callers, but with more lib modules now calling it repeatedly across a test run, it exhausted Postgres's connection limit (had to `brew services restart postgresql@17` to recover). Fixed to a lazy module-level singleton.
+2. The company-invite accept action originally chained `auth.api.signUpEmail` then `auth.api.acceptInvitation`, both via `headers()` — same root cause as the earlier login-redirect bug: the second call can't see the session the first one just created, since the new cookie is only on the outgoing response. Fixed by writing the `auth.members` row directly instead, matching how the admin-invite flow already worked.
+
+All of the above (invite-owner → accept → auto-promoted to company_admin; owner invites a learner from `/team` → accept; access boundaries in both directions) was verified against local Postgres via the real HTTP wire protocol, alongside the automated integration tests.
