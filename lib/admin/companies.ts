@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { authInvitations, authMembers, authOrganizations, authUsers } from "@/db/schema";
 import type { SessionScope } from "@/lib/db/org-scope";
+import { companyInvitationEmail, sendEmail } from "@/lib/email";
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -107,6 +108,12 @@ export async function inviteIntoOrganization(
     return { invited: [] as string[], skipped: [] as { email: string; reason: string }[] };
   }
 
+  const [organization] = await db
+    .select({ name: authOrganizations.name })
+    .from(authOrganizations)
+    .where(eq(authOrganizations.id, organizationId))
+    .limit(1);
+
   const existingMembers = await db
     .select({ email: authUsers.email })
     .from(authMembers)
@@ -140,6 +147,7 @@ export async function inviteIntoOrganization(
       continue;
     }
 
+    const token = randomUUID();
     await db.insert(authInvitations).values({
       id: randomUUID(),
       organizationId,
@@ -148,9 +156,17 @@ export async function inviteIntoOrganization(
       status: "pending",
       expiresAt,
       inviterId,
-      token: randomUUID(),
+      token,
     });
     invited.push(email);
+
+    try {
+      const url = `${process.env.BETTER_AUTH_URL}/invite/${token}`;
+      const { subject, html } = companyInvitationEmail(organization?.name ?? "your organisation", url);
+      await sendEmail({ to: email, subject, html });
+    } catch (error) {
+      console.error(`[email] Failed to send invitation email to ${email}:`, error);
+    }
   }
 
   return { invited, skipped };

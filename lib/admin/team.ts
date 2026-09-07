@@ -4,6 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { adminInvitations, authUsers } from "@/db/schema";
 import type { SessionScope } from "@/lib/db/org-scope";
+import { adminInvitationEmail, sendEmail } from "@/lib/email";
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -68,14 +69,23 @@ export async function inviteAdmins(session: SessionScope, inviterId: string, ema
       continue;
     }
 
+    const token = randomUUID();
     await db.insert(adminInvitations).values({
       email,
-      token: randomUUID(),
+      token,
       invitedBy: inviterId,
       status: "pending",
       expiresAt,
     });
     invited.push(email);
+
+    try {
+      const url = `${process.env.BETTER_AUTH_URL}/admin-invite/${token}`;
+      const { subject, html } = adminInvitationEmail(url);
+      await sendEmail({ to: email, subject, html });
+    } catch (error) {
+      console.error(`[email] Failed to send admin invitation email to ${email}:`, error);
+    }
   }
 
   return { invited, skipped };
