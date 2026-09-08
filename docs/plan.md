@@ -150,7 +150,7 @@ onboarding funnel (5), scorecards (7), `/profile`, `/admin/learners*`, `/team/le
   fills both fields; either the trainer supplies Hindi text or the template gains a column.
 - **Brevo has still never sent a real email.** Both `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`
   must be set or `lib/email.ts` silently logs instead of sending.
-- **No account exists in production.** `auth.users` is empty, which is why sign-in fails there; accounts created locally via `/register` live only in the local database. Set `REGISTRATION_CODE` in Coolify (the register action fails closed without it, rejecting every attempt as "Invalid registration code"), restart so the variable is picked up, then register a master account on the production URL.
+- ~~No account exists in production.~~ Resolved 8 September 2026: `REGISTRATION_CODE` was set in Coolify and a master account was registered at `https://sales.ntswithankit.com/register`. Production sign-in is confirmed working. Note that accounts do not sync between environments — the local and production databases hold separate users.
 - **`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is not set in Coolify.** Next.js encrypts variables
   captured by inline Server Actions, and the framework docs require a stable key shared
   across instances for self-hosted deployments. Without it the key is regenerated per build,
