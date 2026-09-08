@@ -26,7 +26,9 @@
 - [x] Provide a production-safe migration command. `npm run db:migrate:prod` (`node db/migrate.mjs`) uses only runtime dependencies; `npm run db:migrate` cannot run in production because drizzle-kit and tsx are devDependencies and get pruned. Verified by migrating an empty database from scratch to all 19 tables, and by running it again as a no-op.
 - [ ] **Set `npm run db:migrate:prod` as the Coolify pre-deployment command.** Requires Coolify panel access. Until this is done the production database has no tables, so sign-in and every other database-backed request fail.
 - [x] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
-- [ ] Run production migrations only after local verification. Production is currently empty, so destructive migrations are acceptable until content is loaded around 12 September 2026.
+- [x] Run production migrations only after local verification. Verified applied in production on 8 September 2026 (`npm run db:migrate` inside the running container reported "migrations applied successfully", and the `drizzle` journal already existed, so migrations had been applied before that too). `/api/health` returns `{"status":"ok"}`, confirming the app reaches the database.
+- Production state as verified on 8 September 2026: schema present and current, and `auth.users` holds **0 rows**. Destructive migrations remain acceptable until content is loaded.
+- Note: Nixpacks does **not** prune devDependencies in this image, so `drizzle-kit` is present in production and `npm run db:migrate` works there. `db/migrate.mjs` is still the command to wire in, because it does not depend on that build-tool behaviour continuing to hold.
 - [ ] Smoke-test login, database health, R2 uploads/downloads, presigned URL ownership, email flows, and the production deployment.
 
 ## Spreadsheet import and chapter editor (spec §8 step 3)
@@ -147,6 +149,7 @@ onboarding funnel (5), scorecards (7), `/profile`, `/admin/learners*`, `/team/le
   fills both fields; either the trainer supplies Hindi text or the template gains a column.
 - **Brevo has still never sent a real email.** Both `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`
   must be set or `lib/email.ts` silently logs instead of sending.
+- **No account exists in production.** `auth.users` is empty, which is why sign-in fails there; accounts created locally via `/register` live only in the local database. Set `REGISTRATION_CODE` in Coolify (the register action fails closed without it, rejecting every attempt as "Invalid registration code"), restart so the variable is picked up, then register a master account on the production URL.
 - **`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is not set in Coolify.** Next.js encrypts variables
   captured by inline Server Actions, and the framework docs require a stable key shared
   across instances for self-hosted deployments. Without it the key is regenerated per build,
