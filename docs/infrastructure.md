@@ -9,7 +9,7 @@
 - Source: repository `nts-lms`, branch `main`, through the connected GitHub App source `nts-lms-github`.
 - Deploys: pushes to `main` trigger an automatic Coolify build and deploy using the Nixpacks build pack.
 - Coolify panel: `http://187.127.136.176:8000/`.
-- Production URL: pending customer domain.
+- Production URL: `https://sales.ntswithankit.com`. Live and serving over HTTPS as of 8 September 2026; `/api/health` returns `{"status":"ok"}`, so the app reaches the database.
 - Health check: implement `/api/health`; it must query PostgreSQL and return HTTP 200 only when the application can reach the database.
 
 ## PostgreSQL
@@ -50,7 +50,7 @@
 ## Email and Domain
 
 - DNS provider: Cloudflare.
-- Domain and DNS-to-VPS status: pending customer confirmation.
+- Domain and DNS-to-VPS status: `sales.ntswithankit.com` resolves to the VPS and serves a valid certificate. Still to confirm: secure-cookie settings and Better Auth allowed origins for this host.
 - Email provider: Brevo API, not SMTP.
 - Sender domain: pending verification.
 - Production variables: `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` in Coolify. Both are required: `lib/email.ts` falls back to console-logging instead of sending if either is missing, so a deploy with only the API key set will silently deliver no mail.

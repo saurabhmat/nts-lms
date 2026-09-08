@@ -9,7 +9,8 @@
 - [x] Configure a unique `BETTER_AUTH_SECRET` and the final `BETTER_AUTH_URL` in Coolify before the first production deploy.
 - [x] Configure `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME` for bucket `nts-lms-content`.
 - [ ] Configure `BREVO_API_KEY` in Coolify later when Brevo is ready. Do not commit production secrets or create a production `.env` file.
-- [ ] Configure the production domain after the customer provides it, then set Cloudflare DNS, SSL, secure cookies, and allowed origins.
+- [x] Configure the production domain and DNS/SSL. `https://sales.ntswithankit.com` is live, serving a valid certificate, with `/api/health` returning ok (verified 8 September 2026).
+- [ ] Confirm secure cookies and Better Auth allowed origins for `sales.ntswithankit.com`. `BETTER_AUTH_URL` must match the public HTTPS origin exactly, or sign-in sets a cookie the browser will not send back.
 
 ## Application Requirements
 
