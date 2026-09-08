@@ -13,7 +13,17 @@ import postgres from "postgres";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
-  console.error("DATABASE_URL is not set. Refusing to run migrations.");
+  console.error(
+    [
+      "DATABASE_URL is not set. Refusing to run migrations.",
+      "",
+      "This script is meant to run as the Coolify pre-deployment command, where",
+      "DATABASE_URL is injected automatically. It is not normally run by hand.",
+      "",
+      "To run it against your local database instead:",
+      "  node --env-file=.env.local db/migrate.mjs",
+    ].join("\n"),
+  );
   process.exit(1);
 }
 
