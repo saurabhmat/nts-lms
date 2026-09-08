@@ -14,9 +14,9 @@
 ## Application Requirements
 
 - [x] Build `/api/health` to query PostgreSQL and return HTTP 200 only when the database is reachable.
-- [ ] Use R2 object keys `chapters/{chapterId}/notes/{uuid}-{filename}` and `submissions/{userId}/{chapterId}/{uuid}-{filename}`.
-- [ ] Generate short-lived presigned URLs server-side only after ownership checks; never expose bucket paths to clients.
-- [ ] Implement Brevo invitation, password-reset, and later chapter-unlocked templates in the repository.
+- [x] Use R2 object keys `chapters/{chapterId}/notes/{uuid}-{filename}` and `submissions/{userId}/{chapterId}/{uuid}-{filename}`. Both key builders live in `lib/r2.ts`.
+- [x] Generate short-lived presigned URLs server-side only after ownership checks; never expose bucket paths to clients. `lib/r2.ts` presigns for 300 seconds and is only ever called from server code behind a role check (`getChapterNotesUrl`). Not yet exercised against the live bucket — see the R2 credentials note below.
+- [x] Implement Brevo invitation and password-reset templates in the repository (`lib/email.ts`). The chapter-unlocked template is still outstanding, and no email has yet been sent through a real Brevo account.
 - [ ] Do not add Redis or any other service without explicit approval.
 
 ## Migration and Deployment Workflow
@@ -27,6 +27,77 @@
 - [x] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
 - [ ] Run production migrations only after local verification. Production is currently empty, so destructive migrations are acceptable until content is loaded around 12 September 2026.
 - [ ] Smoke-test login, database health, R2 uploads/downloads, presigned URL ownership, email flows, and the production deployment.
+
+## Spreadsheet import and chapter editor (spec §8 step 3)
+
+The critical-path step: until this existed there was no way to load real content, so every
+later screen would have had to be built against fixtures.
+
+- [x] `lib/import/parse.ts` — pure, database-free parsing and validation of the real
+  `NTS_LMS_Content_Template.xlsx`. Built against the actual workbook rather than the spec's
+  summary table, which turned up three things the spec does not mention: an `Instructions`
+  tab, a `has_video` column on `Chapters` (ignored — video is out of scope per spec §9), and
+  the analysis bands living in two extra columns *beside* the psychometric questions,
+  interleaved with the template author's own instruction prose. Only rows whose band cell
+  parses as a percentage range are treated as bands, so that prose is never imported.
+- [x] Row-level error reporting with real spreadsheet row numbers, warnings separated from
+  blocking errors, and one bad row never failing the whole file (spec §6).
+- [x] `lib/import/commit.ts` — transactional, idempotent commit. Re-importing replaces a
+  question set's questions rather than appending, and chapter rows are matched on
+  (course, order) and updated in place.
+- [x] Re-import deliberately preserves `notes_file_key` and `is_published`, so reloading the
+  text content cannot throw away an uploaded notes PDF or silently unpublish a live chapter.
+- [x] `/admin/import` — upload, preview with per-tab counts and issue list, then confirm.
+  The file is re-sent and re-parsed on commit rather than cached server-side, so what is
+  committed is exactly what was previewed, with no server-side session state to expire.
+- [x] `/admin/course` and `/admin/course/[chapterId]` — chapter list and editor: bilingual
+  titles, summary, deliverable, notes upload to R2, publish/unpublish, and a read-only view
+  of the chapter's imported test questions.
+- [x] Publishing is blocked until chapter notes are uploaded.
+- [x] `lib/r2.ts` — S3 client, the two documented key shapes, filename sanitisation, and
+  300-second presigned downloads. `npm run verify:r2` does a real round-trip (put, presign,
+  fetch over plain HTTPS, delete) and is ready to run the moment credentials land.
+- [x] 41 new tests (69 total, all passing), including the parser against the real customer
+  template and the commit layer against the live local database.
+
+Verified end to end over the real HTTP wire protocol, not just through unit tests: signed in
+as master, uploaded a filled 10-chapter / 100-question workbook through the real server
+action, previewed it, committed it (10 chapters, 110 questions, 12 question sets, 4 bands),
+and re-committed the same file to confirm the database did not duplicate (0 created, 10
+updated). The chapter editor's save, publish-refusal and validation paths were driven through
+their no-JS server-action forms. A learner account was refused at both layers: redirected to
+`/403` on the pages, and refused by the action itself when POSTed directly.
+
+Two safeguards added that the spec does not call for:
+1. `responses` cascades from `questions`, so re-importing after learners have taken tests
+   would silently delete their answers. The preview counts the answers at risk, warns, and
+   the commit refuses to run without explicit confirmation.
+2. The template supplies a single analysis-text column, but `analysis_bands.body_hi` is NOT
+   NULL. The English text currently stands in for both so a Hindi learner always sees
+   something. **This needs a decision from the trainer** — see Open questions.
+
+## Open questions and blockers
+
+- **R2 credentials are not available locally.** `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`
+  exist only in Coolify; `docs/infrastructure.md` records the account id and endpoint but not
+  the keys. The R2 code and `npm run verify:r2` are written and waiting, but the live
+  round-trip is unrun, so chapter notes upload/download is the one part of this work not yet
+  proven against real infrastructure.
+- **Hindi analysis-band text.** The template has no Hindi column for it. English currently
+  fills both fields; either the trainer supplies Hindi text or the template gains a column.
+- **Brevo has still never sent a real email.** Both `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`
+  must be set or `lib/email.ts` silently logs instead of sending.
+
+Two configuration discrepancies found and fixed while doing this work:
+1. `.env.example` declared `R2_ACCOUNT_ID`, but `docs/infrastructure.md` and Coolify both use
+   `R2_ENDPOINT`. Renamed to `R2_ENDPOINT`.
+2. `docs/infrastructure.md` listed only `BREVO_API_KEY` as a production variable, but
+   `lib/email.ts` needs `BREVO_SENDER_EMAIL` too and falls back to console-logging without
+   it — so a production deploy following the doc would have quietly delivered no mail at all.
+   The doc now lists both and says so.
+
+Also raised `serverActions.bodySizeLimit` to 25 MB in `next.config.ts`: the default is 1 MB,
+which chapter notes PDFs would exceed.
 
 ## Backup and Operations
 

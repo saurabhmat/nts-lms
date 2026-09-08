@@ -43,7 +43,7 @@
 - Domain and DNS-to-VPS status: pending customer confirmation.
 - Email provider: Brevo API, not SMTP.
 - Sender domain: pending verification.
-- Production variable: `BREVO_API_KEY` in Coolify.
+- Production variables: `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` in Coolify. Both are required: `lib/email.ts` falls back to console-logging instead of sending if either is missing, so a deploy with only the API key set will silently deliver no mail.
 - Brevo is intentionally deferred and is not required for the current deployment checkpoint.
 - Required templates: invitation, password reset, and later chapter unlocked. Implement the templates in the repository rather than relying on Brevo's template UI.
 

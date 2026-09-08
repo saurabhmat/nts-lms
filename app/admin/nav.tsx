@@ -18,9 +18,9 @@ const sections: { href: string; label: string; icon: LucideIcon; enabled: boolea
   { href: "/admin/companies", label: "Companies", icon: Building2, enabled: true },
   { href: "/admin/team", label: "Team", icon: ShieldCheck, enabled: true },
   { href: "/admin/learners", label: "Learners", icon: Users, enabled: false },
-  { href: "/admin/course", label: "Course", icon: BookOpen, enabled: false },
+  { href: "/admin/course", label: "Course", icon: BookOpen, enabled: true },
   { href: "/admin/questions", label: "Questions", icon: ListChecks, enabled: false },
-  { href: "/admin/import", label: "Import", icon: Upload, enabled: false },
+  { href: "/admin/import", label: "Import", icon: Upload, enabled: true },
   { href: "/admin/analysis-bands", label: "Analysis bands", icon: BarChart3, enabled: false },
   { href: "/admin/settings", label: "Settings", icon: Settings, enabled: false },
 ];
