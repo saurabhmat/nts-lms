@@ -87,5 +87,7 @@ User-facing records that require direct tenancy filtering carry `organization_id
 - The app and PostgreSQL share the same 8 GB VPS. Do not add Redis or any other service without explicit approval.
 - If Next.js builds become memory-heavy, report the issue rather than silently adding workarounds or infrastructure.
 - Local development uses Docker Postgres.
-- Run and verify migrations locally first, then run `npm run db:migrate` in production during deployment.
+- Run and verify migrations locally first. In production run `npm run db:migrate:prod` (`node db/migrate.mjs`), **not** `npm run db:migrate`.
+- `npm run db:migrate` uses drizzle-kit, and both `drizzle-kit` and `tsx` are devDependencies, so it fails in a production image where devDependencies are pruned. `db/migrate.mjs` uses only runtime dependencies (`drizzle-orm` + `postgres`) and plain node, and writes the same `drizzle.__drizzle_migrations` journal, so the two stay in step.
+- Set it as the Coolify **pre-deployment command** on `nts-lms-app`, so every deploy migrates before the new container serves traffic. Until this is configured, the production database has no tables at all and every request that touches it fails.
 - Production environment variables belong in Coolify, not in a committed `.env` file.

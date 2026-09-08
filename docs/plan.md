@@ -23,7 +23,8 @@
 
 - [x] Run local Postgres and apply migrations locally. Docker/Podman/Colima remain unavailable in this environment; used Homebrew `postgresql@17` instead (database `nts_lms`, connected via `.env.local`). `drizzle-kit check` reports no drift and all 18 tables (11 public + 7 `auth`) exist.
 - [x] Verify schema, tests, and a clean local boot before deployment. `npm test` passes (8/8 org-isolation tests); `npm run dev` boots and `/api/health` returns 200 against the local database. Seed data still outstanding — no seed script exists yet.
-- [ ] Add `npm run db:migrate` to the Coolify build/pre-deploy migration step.
+- [x] Provide a production-safe migration command. `npm run db:migrate:prod` (`node db/migrate.mjs`) uses only runtime dependencies; `npm run db:migrate` cannot run in production because drizzle-kit and tsx are devDependencies and get pruned. Verified by migrating an empty database from scratch to all 19 tables, and by running it again as a no-op.
+- [ ] **Set `npm run db:migrate:prod` as the Coolify pre-deployment command.** Requires Coolify panel access. Until this is done the production database has no tables, so sign-in and every other database-backed request fail.
 - [x] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
 - [ ] Run production migrations only after local verification. Production is currently empty, so destructive migrations are acceptable until content is loaded around 12 September 2026.
 - [ ] Smoke-test login, database health, R2 uploads/downloads, presigned URL ownership, email flows, and the production deployment.
