@@ -32,6 +32,16 @@
 - Region: `auto`.
 - Configure these production variables in Coolify: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`.
 - The Coolify snapshot confirms the production database, Better Auth, and R2 variables are enabled for both buildtime and runtime. Preview has corresponding variables configured separately.
+
+## Server Actions encryption key
+
+- Production variable: `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` in Coolify.
+- A base64-encoded AES key of 16, 24 or 32 bytes; Next.js uses 32 by default. Generate with `openssl rand -base64 32`.
+- **Must be enabled at buildtime as well as runtime.** The key is embedded in the build output, so a runtime-only variable has no effect and each build silently gets a fresh random key.
+- Without it, action references from an earlier build stop decrypting after a redeploy, which surfaces as "Failed to find Server Action" errors, and the app cannot safely run as more than one instance.
+- Keep it stable. Rotating it invalidates the action references baked into existing builds.
+- Not required for local development: a single instance regenerating the key per build is fine.
+- Reference: `node_modules/next/dist/docs/01-app/02-guides/self-hosting.md`.
 - Object keys:
   - `chapters/{chapterId}/notes/{uuid}-{filename}`
   - `submissions/{userId}/{chapterId}/{uuid}-{filename}`
