@@ -76,6 +76,65 @@ Two safeguards added that the spec does not call for:
    NULL. The English text currently stands in for both so a Hindi learner always sees
    something. **This needs a decision from the trainer** — see Open questions.
 
+## Question engine and the course interface (spec §8 steps 4 and 6)
+
+Step 4 is the piece the spec calls "the single biggest time saving in the project": one
+engine serving psychometric assessments and chapter tests, differing only in how a response
+is scored.
+
+- [x] `lib/engine/index.ts` — start/resume, save, submit and read-back over the shared
+  `question_sets` / `questions` / `attempts` / `responses` tables.
+- [x] Resumable state: an attempt persists `current_question_index`, so a learner who closes
+  the tab mid-test returns to the same question with their answers intact (spec §5).
+- [x] Chapter-test scoring by `correct_option`, against the configurable pass mark.
+- [x] Psychometric scoring by summing `option_scores`, measured against the best-scoring
+  option per question, then matched to an analysis band and written to `analyses`.
+- [x] Retake limit enforced (`retakeLimit` is retakes *after* the first attempt, so the total
+  is `retakeLimit + 1`), a passed test cannot be retaken, and `progress.test_score` keeps the
+  learner's *best* score so a failed retake never pulls a passing score down (spec §7).
+- [x] Ownership enforced in the engine itself, not just in the pages: every read and write
+  checks the attempt belongs to the calling learner.
+- [x] `lib/settings.ts` — `course_settings` is created on first read, so a fresh database has
+  working defaults (pass mark, retake limit, sequencing rule) with no seed step. The table
+  had zero rows before this.
+- [x] `lib/course.ts` — the unlock rules: chapters unlock in order, chapter N needs N-1
+  complete, configurable to "open", and only published chapters are ever visible.
+- [x] `/course` — the Udemy-style chapter list: cards with status, progress bar, best score,
+  and a Start/Continue call to action.
+- [x] `/course/[chapterId]` — notes viewer (presigned, after an access check), deliverable
+  brief, attempt history and the Take/Retake test call to action.
+- [x] `/course/[chapterId]/test` — the test player: one question per screen, progress bar,
+  and an EN/HI toggle that switches instantly with no reload and no loss of answers, since
+  both languages are already on the row and the toggle is pure client state (spec §7).
+- [x] `/course/[chapterId]/test/result` — score, pass/fail and a per-question review.
+- [x] Login now sends a learner to `/course`; it previously dropped them on the bare
+  homepage, the same bug this plan recorded earlier for `company_admin`.
+
+Verified end to end over the real HTTP wire protocol, not just through unit tests: a learner
+signed in, saw chapter 1 available and 2-10 locked, opened chapter 1, took the test through
+the real server actions and failed it (0/10, chapter marked `in_progress`), retook it and
+passed (10/10, chapter `complete`, best score kept), and chapter 2 then unlocked and rendered
+where it had previously redirected away. Re-taking a passed test is refused with a message,
+a locked chapter redirects to `/course`, a submitted attempt refuses further answers, an
+invalid option is rejected by the engine, and an anonymous request is sent to `/login`.
+
+One bug found and fixed during that walkthrough: reading another learner's result returned
+HTTP 500. Access was correctly denied — the engine throws on an ownership miss, which is the
+right behaviour — but the result page now catches it and redirects instead of crashing.
+Covered by a regression test.
+
+Also changed: `vitest.config.ts` now sets `fileParallelism: false`. These are integration
+suites against one shared local Postgres database, and several assert on global counts or
+clean whole tables; running files in parallel let one suite's fixtures leak into another's
+assertions. This surfaced as soon as a second suite touched the same tables.
+
+Not built yet, deliberately: the onboarding gate. Spec §5 redirects a learner with
+`onboarding_state != complete` to `/onboarding/*`, but that funnel is step 5 and does not
+exist, so enforcing the gate now would make the course unreachable for everyone. The comment
+in `app/course/layout.tsx` marks exactly where it goes. Steps still outstanding: the
+onboarding funnel (5), scorecards (7), `/profile`, `/admin/learners*`, `/team/learners/[userId]`,
+`/admin/questions`, `/admin/analysis-bands` and `/admin/settings`.
+
 ## Open questions and blockers
 
 - **R2 credentials are not available locally.** `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`
@@ -87,6 +146,11 @@ Two safeguards added that the spec does not call for:
   fills both fields; either the trainer supplies Hindi text or the template gains a column.
 - **Brevo has still never sent a real email.** Both `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`
   must be set or `lib/email.ts` silently logs instead of sending.
+- **`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is not set in Coolify.** Next.js encrypts variables
+  captured by inline Server Actions, and the framework docs require a stable key shared
+  across instances for self-hosted deployments. Without it the key is regenerated per build,
+  which can break in-flight action requests across a redeploy and would break outright if the
+  app is ever run as more than one instance.
 
 Two configuration discrepancies found and fixed while doing this work:
 1. `.env.example` declared `R2_ACCOUNT_ID`, but `docs/infrastructure.md` and Coolify both use

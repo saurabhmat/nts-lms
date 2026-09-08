@@ -27,5 +27,5 @@ export async function login(formData: FormData) {
 
   if (role === "master") redirect("/admin");
   if (role === "company_admin") redirect("/team");
-  redirect("/");
+  redirect("/course");
 }
