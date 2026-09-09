@@ -216,6 +216,55 @@ needs re-running afterwards to get the dev content back. Several suites also ass
 counts, so leftover course rows from manual testing will fail them -- clean up fixtures before
 running the suite.
 
+## The reporting hierarchy (spec §8 step 7)
+
+The three-level structure the trainer asked for: the master sees every company and learner, a
+company manager sees only their own people, and a learner sees only themselves.
+
+Progress and scores were already being written correctly by the engine; nothing read them back
+except the learner's own course list. This adds one read layer and surfaces it three ways, so
+"how is this learner doing" has a single definition rather than three that drift apart.
+
+- [x] `lib/reporting.ts` -- the shared read layer. Every organisation-scoped read goes through
+  `organizationUserWhere`, per the critical rule in spec §2; a company manager asking for
+  another organisation's id is rejected by the scope helper itself rather than by the page.
+- [x] `assertCanViewLearner` -- master sees anyone, a manager only their own organisation's
+  members, a learner only themselves. It lives in the read layer, not in the pages, because
+  these ids arrive from URLs and are untrusted.
+- [x] `/admin` -- was a bare redirect to the companies list; now the master dashboard. Platform
+  totals, then every company with manager count, learner count against seat limit, onboarded
+  count, average completion and average score.
+- [x] `/admin/learners` and `/admin/learners/[userId]` -- individual learners (no organisation)
+  and the whole-platform grid, plus any learner's full record.
+- [x] `/admin/companies/[orgId]` -- gains a progress grid above the membership list. The list
+  below it is now explicitly about members and roles, which is what it was always doing.
+- [x] `/team` -- the manager's dashboard is now the learners x chapters grid spec §5 asked for,
+  replacing a roster that showed only onboarding state. The placeholder line promising
+  "chapter scores and progress will show here" is delivered and gone.
+- [x] The company name moved into the `/team` banner, so a manager always sees which
+  organisation they are looking at on every screen, not just the landing page.
+- [x] `/scorecard` -- the learner's own record: psychometric result, per-chapter scores,
+  completion and attempt history.
+- [x] `components/progress-grid.tsx` and `components/learner-record.tsx` -- shared by all three
+  roles, so the master, the manager and the learner read identical numbers.
+- [x] `components/learner-shell.tsx` -- the header and onboarding gate extracted from the course
+  layout so `/scorecard` cannot drift from `/course`.
+- [x] Admin nav: Dashboard added, Learners enabled. Questions, Analysis bands and Settings
+  remain marked SOON because they genuinely are not built.
+- [x] 14 new tests (118 total), lint clean, production build verified.
+
+Verified end to end over the real HTTP wire protocol against a seeded company (Acme Industries:
+one manager, three learners, real imported content and real attempt data driven through the
+engine). The master dashboard reported the company with 1 manager, 3 of 25 seats, 2 onboarded,
+20% average completion and 4.2 average score, all of which reconcile by hand against the
+underlying rows. Every boundary was probed in both directions: a manager opening another
+company's learner gets `/403`, as does a manager reaching for `/admin` or `/admin/learners`; a
+learner reaching for `/team`, another learner's record, or `/admin` gets `/403`; the master
+opens anyone. The manager's grid contained exactly their own three learners and no one else's.
+
+Not built, and still outstanding: `/profile` (name, password, language preference),
+`/admin/questions`, `/admin/analysis-bands` and `/admin/settings`.
+
 ## Open questions and blockers
 
 - ~~R2 credentials are not available locally.~~ Resolved 9 September 2026: the keys were

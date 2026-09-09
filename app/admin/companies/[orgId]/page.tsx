@@ -8,6 +8,8 @@ import {
   inviteLearners,
   setMemberApplicationRole,
 } from "@/lib/admin/companies";
+import { ProgressGrid } from "@/components/progress-grid";
+import { getLearnerProgress, listChapterColumns } from "@/lib/reporting";
 import { getSessionScope } from "@/lib/session";
 
 function initialsFor(name: string) {
@@ -86,6 +88,15 @@ export default async function CompanyDetailPage({
   if (!detail) notFound();
 
   const { organization, roster, pendingInvitations } = detail;
+  const [progressRows, columns] = await Promise.all([
+    getLearnerProgress(scope, orgId),
+    listChapterColumns(),
+  ]);
+  const onboarded = progressRows.filter((row) => row.onboardingState === "complete").length;
+  const averageCompletion =
+    progressRows.length > 0
+      ? progressRows.reduce((total, row) => total + row.completionPct, 0) / progressRows.length
+      : 0;
   const boundInviteAction = inviteLearnersAction.bind(null, orgId);
   const boundInviteOwnerAction = inviteCompanyOwnerAction.bind(null, orgId);
   const boundToggleRoleAction = toggleMemberRoleAction.bind(null, orgId);
@@ -106,6 +117,8 @@ export default async function CompanyDetailPage({
         <p className="mt-1 text-sm text-slate-500">
           {organization.slug} · {organization.status}
           {organization.seatLimit ? ` · seat limit ${organization.seatLimit}` : ""}
+          {` · ${progressRows.length} learner${progressRows.length === 1 ? "" : "s"}`}
+          {` · ${onboarded} onboarded · ${Math.round(averageCompletion)}% average completion`}
         </p>
       </div>
 
@@ -117,7 +130,21 @@ export default async function CompanyDetailPage({
 
       <section>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Learners ({roster.length})
+          Progress ({progressRows.length})
+        </h2>
+        <div className="mt-2">
+          <ProgressGrid
+            rows={progressRows}
+            columns={columns}
+            learnerHrefPrefix="/admin/learners"
+            emptyMessage="No learners in this company yet. Invite them below."
+          />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Members and roles ({roster.length})
         </h2>
         <ul className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {roster.map((member) => (

@@ -3,6 +3,7 @@
 import {
   BarChart3,
   Building2,
+  LayoutDashboard,
   ListChecks,
   type LucideIcon,
   Settings,
@@ -15,9 +16,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const sections: { href: string; label: string; icon: LucideIcon; enabled: boolean }[] = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, enabled: true },
   { href: "/admin/companies", label: "Companies", icon: Building2, enabled: true },
   { href: "/admin/team", label: "Team", icon: ShieldCheck, enabled: true },
-  { href: "/admin/learners", label: "Learners", icon: Users, enabled: false },
+  { href: "/admin/learners", label: "Learners", icon: Users, enabled: true },
   { href: "/admin/course", label: "Course", icon: BookOpen, enabled: true },
   { href: "/admin/questions", label: "Questions", icon: ListChecks, enabled: false },
   { href: "/admin/import", label: "Import", icon: Upload, enabled: true },
@@ -48,7 +50,8 @@ export function AdminNav() {
           );
         }
 
-        const isActive = pathname === href || pathname.startsWith(`${href}/`);
+        const isActive =
+          href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`);
 
         return (
           <Link

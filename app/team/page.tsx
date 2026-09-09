@@ -3,18 +3,12 @@ import { redirect } from "next/navigation";
 
 import {
   getMyOrganization,
-  getMyOrganizationRoster,
   inviteLearnersIntoMyOrganization,
   listPendingInvitationsForMyOrganization,
 } from "@/lib/team/roster";
+import { ProgressGrid } from "@/components/progress-grid";
+import { getLearnerProgress, listChapterColumns } from "@/lib/reporting";
 import { getSessionScope } from "@/lib/session";
-
-function initialsFor(name: string) {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
-  return (first + last).toUpperCase();
-}
 
 async function inviteLearnersAction(formData: FormData) {
   "use server";
@@ -46,11 +40,18 @@ export default async function TeamPage({
   const scope = await getSessionScope();
   if (!scope) redirect("/login");
 
-  const [organization, roster, pendingInvitations] = await Promise.all([
+  // getLearnerProgress goes through the shared organisation-scope helper, so a manager can
+  // only ever receive their own company's learners -- see docs/spec.md §2.
+  const [organization, roster, pendingInvitations, columns] = await Promise.all([
     getMyOrganization(scope),
-    getMyOrganizationRoster(scope),
+    getLearnerProgress(scope),
     listPendingInvitationsForMyOrganization(scope),
+    listChapterColumns(),
   ]);
+
+  const onboarded = roster.filter((learner) => learner.onboardingState === "complete").length;
+  const averageCompletion =
+    roster.length > 0 ? roster.reduce((total, row) => total + row.completionPct, 0) / roster.length : 0;
 
   return (
     <div className="space-y-8">
@@ -59,7 +60,8 @@ export default async function TeamPage({
           {organization?.name ?? "Your team"}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          {roster.length} learner{roster.length === 1 ? "" : "s"}
+          {roster.length} learner{roster.length === 1 ? "" : "s"} · {onboarded} onboarded ·{" "}
+          {Math.round(averageCompletion)}% average completion
         </p>
       </div>
 
@@ -73,24 +75,14 @@ export default async function TeamPage({
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Learners ({roster.length})
         </h2>
-        <ul className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          {roster.map((member) => (
-            <li key={member.id} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
-              <span className="flex items-center gap-3">
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">
-                  {initialsFor(member.name)}
-                </span>
-                <span className="text-slate-900">
-                  {member.name} <span className="text-slate-400">· {member.email}</span>
-                </span>
-              </span>
-              <span className="text-slate-500">{member.onboardingState}</span>
-            </li>
-          ))}
-          {roster.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm text-slate-500">No learners yet.</li>
-          )}
-        </ul>
+        <div className="mt-2">
+          <ProgressGrid
+            rows={roster}
+            columns={columns}
+            learnerHrefPrefix="/team/learners"
+            emptyMessage="No learners yet. Invite them below."
+          />
+        </div>
       </section>
 
       <section>
@@ -142,9 +134,6 @@ export default async function TeamPage({
         </form>
       </section>
 
-      <p className="text-sm text-slate-400">
-        Chapter scores and progress will show here once the course content is loaded.
-      </p>
     </div>
   );
 }

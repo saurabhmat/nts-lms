@@ -6,18 +6,11 @@ import { auth } from "@/lib/auth";
 import { getOnboardingState, isOnboardingAvailable } from "@/lib/onboarding";
 import { getSessionScope } from "@/lib/session";
 
-export default async function CourseLayout({ children }: { children: React.ReactNode }) {
+// Same gate as the course: a learner mid-onboarding has no scorecard to look at yet.
+export default async function ScorecardLayout({ children }: { children: React.ReactNode }) {
   const scope = await getSessionScope();
   if (!scope) redirect("/login");
 
-  // The onboarding gate of docs/spec.md §5 and §7: no chapter is reachable until the learner
-  // has finished onboarding. It applies only to learners -- a master or company admin viewing
-  // the course has no onboarding state to complete.
-  //
-  // It is also conditional on onboarding content existing. A database with no psychometric
-  // questions loaded -- which is what production looks like before the trainer's workbook is
-  // imported -- would otherwise redirect every learner into a funnel they cannot finish and
-  // lock them out of the course entirely. The gate switches itself on when content lands.
   if (scope.role === "learner") {
     const state = await getOnboardingState(scope.userId);
     if (state !== "complete" && (await isOnboardingAvailable())) redirect("/onboarding");

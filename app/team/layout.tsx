@@ -3,11 +3,16 @@ import { redirect } from "next/navigation";
 
 import { getSessionScope } from "@/lib/session";
 import { signOutAction } from "@/lib/session-actions";
+import { getMyOrganization } from "@/lib/team/roster";
 
 export default async function TeamLayout({ children }: { children: React.ReactNode }) {
   const scope = await getSessionScope();
   if (!scope) redirect("/login");
   if (scope.role !== "company_admin") redirect("/403");
+
+  // The company name belongs in the banner, not just on the page: a manager should always be
+  // able to see which organisation they are looking at, on every screen.
+  const organization = await getMyOrganization(scope);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -18,8 +23,10 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
               N
             </div>
             <div>
-              <p className="text-sm font-semibold tracking-tight text-slate-900">NTS LMS</p>
-              <p className="text-xs text-slate-500">Company Admin</p>
+              <p className="text-sm font-semibold tracking-tight text-slate-900">
+                {organization?.name ?? "NTS LMS"}
+              </p>
+              <p className="text-xs text-slate-500">Team dashboard · NTS LMS</p>
             </div>
           </div>
           <form action={signOutAction}>
