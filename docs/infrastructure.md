@@ -32,6 +32,7 @@
 - Region: `auto`.
 - Configure these production variables in Coolify: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`.
 - The Coolify snapshot confirms the production database, Better Auth, and R2 variables are enabled for both buildtime and runtime. Preview has corresponding variables configured separately.
+- **Verified working 9 September 2026.** `npm run verify:r2` completed a full round-trip against the live `nts-lms-content` bucket: upload, presign, a presigned GET fetched over plain HTTPS outside the SDK with byte-for-byte matching content, and delete. This confirms the credentials carry object read and write permission on the correct bucket and that `R2_ENDPOINT` is in the right form. Chapter-notes upload through the admin chapter editor is still untested *in production*, because no content has been imported there yet.
 
 ## Server Actions encryption key
 
@@ -52,9 +53,15 @@
 - DNS provider: Cloudflare.
 - Domain and DNS-to-VPS status: `sales.ntswithankit.com` resolves to the VPS and serves a valid certificate. Still to confirm: secure-cookie settings and Better Auth allowed origins for this host.
 - Email provider: Brevo API, not SMTP.
-- Sender domain: pending verification.
+- Sender domain: `ntswithankit.com`, sending as `no-reply@ntswithankit.com`. **Not verified in Brevo as of 9 September 2026** (`verified: false`, `authenticated: false`).
+  - DKIM (`brevo1._domainkey`, `brevo2._domainkey` CNAMEs) and DMARC (`_dmarc` TXT) are published correctly and match Brevo's expected values.
+  - The `brevo-code` TXT record on the root is **wrong**: it contains the Brevo API key instead of the verification code. Correct value is `brevo-code:4e37728db9dcaf69657a71d02f5888cf` (host `@`, TXT).
+  - **This exposed the API key in public DNS.** Rotate the key in Brevo, update Coolify and `.env.local`, then fix the TXT record.
+  - No SPF record and no MX record exist on the domain. SPF is worth adding for deliverability; without MX, replies to `no-reply@` bounce.
+- Plan: free tier, **300 emails/day**. Bulk learner invitations can exceed this.
+- Verified 9 September 2026: `lib/email.ts` sent a real password-reset email through the Brevo SDK to a live inbox and returned without throwing (Brevo HTTP 201). The send branch had never executed before this.
 - Production variables: `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` in Coolify. Both are required: `lib/email.ts` falls back to console-logging instead of sending if either is missing, so a deploy with only the API key set will silently deliver no mail.
-- Brevo is intentionally deferred and is not required for the current deployment checkpoint.
+- Brevo was intentionally deferred through the first deployment checkpoint. It is now configured and sending as of 9 September 2026, with the domain-verification and key-rotation items above still outstanding.
 - Required templates: invitation, password reset, and later chapter unlocked. Implement the templates in the repository rather than relying on Brevo's template UI.
 
 ## Backups

@@ -16,8 +16,8 @@
 
 - [x] Build `/api/health` to query PostgreSQL and return HTTP 200 only when the database is reachable.
 - [x] Use R2 object keys `chapters/{chapterId}/notes/{uuid}-{filename}` and `submissions/{userId}/{chapterId}/{uuid}-{filename}`. Both key builders live in `lib/r2.ts`.
-- [x] Generate short-lived presigned URLs server-side only after ownership checks; never expose bucket paths to clients. `lib/r2.ts` presigns for 300 seconds and is only ever called from server code behind a role check (`getChapterNotesUrl`). Not yet exercised against the live bucket — see the R2 credentials note below.
-- [x] Implement Brevo invitation and password-reset templates in the repository (`lib/email.ts`). The chapter-unlocked template is still outstanding, and no email has yet been sent through a real Brevo account.
+- [x] Generate short-lived presigned URLs server-side only after ownership checks; never expose bucket paths to clients. `lib/r2.ts` presigns for 300 seconds and is only ever called from server code behind a role check (`getChapterNotesUrl`). Verified against the live `nts-lms-content` bucket on 9 September 2026.
+- [x] Implement Brevo invitation and password-reset templates in the repository (`lib/email.ts`). The chapter-unlocked template is still outstanding. The password-reset template was sent through a real Brevo account to a live inbox on 9 September 2026; the invitation template has been rendered but not yet sent end to end.
 - [ ] Do not add Redis or any other service without explicit approval.
 
 ## Migration and Deployment Workflow
@@ -25,7 +25,7 @@
 - [x] Run local Postgres and apply migrations locally. Docker/Podman/Colima remain unavailable in this environment; used Homebrew `postgresql@17` instead (database `nts_lms`, connected via `.env.local`). `drizzle-kit check` reports no drift and all 18 tables (11 public + 7 `auth`) exist.
 - [x] Verify schema, tests, and a clean local boot before deployment. `npm test` passes (8/8 org-isolation tests); `npm run dev` boots and `/api/health` returns 200 against the local database. Seed data still outstanding — no seed script exists yet.
 - [x] Provide a production-safe migration command. `npm run db:migrate:prod` (`node db/migrate.mjs`) uses only runtime dependencies; `npm run db:migrate` cannot run in production because drizzle-kit and tsx are devDependencies and get pruned. Verified by migrating an empty database from scratch to all 19 tables, and by running it again as a no-op.
-- [ ] **Set `npm run db:migrate:prod` as the Coolify pre-deployment command.** Requires Coolify panel access. Until this is done the production database has no tables, so sign-in and every other database-backed request fail.
+- [x] **Set `npm run db:migrate:prod` as the Coolify pre-deployment command.** Configured in the Coolify panel by the operator on 9 September 2026, followed by a successful redeploy: the site came back up, `/api/health` returns `{"status":"ok"}` and sign-in works. Migrations were already applied, so this first run was a deliberate no-op — the safest possible way to prove the wiring. Not directly observed from this environment: the build log line confirming the pre-deploy step ran. If it had failed it would have exited non-zero and aborted the deploy, so a green deploy is strong but indirect evidence.
 - [x] Deploy by pushing verified changes to `main`; Coolify builds and deploys automatically.
 - [x] Run production migrations only after local verification. Verified applied in production on 8 September 2026 (`npm run db:migrate` inside the running container reported "migrations applied successfully", and the `drizzle` journal already existed, so migrations had been applied before that too). `/api/health` returns `{"status":"ok"}`, confirming the app reaches the database.
 - Production state as verified on 8 September 2026: schema present and current, and `auth.users` holds **0 rows**. Destructive migrations remain acceptable until content is loaded.
@@ -60,7 +60,9 @@ later screen would have had to be built against fixtures.
 - [x] Publishing is blocked until chapter notes are uploaded.
 - [x] `lib/r2.ts` — S3 client, the two documented key shapes, filename sanitisation, and
   300-second presigned downloads. `npm run verify:r2` does a real round-trip (put, presign,
-  fetch over plain HTTPS, delete) and is ready to run the moment credentials land.
+  fetch over plain HTTPS, delete). Run against the live bucket on 9 September 2026: all four
+  steps passed, including the presigned GET fetched outside the SDK with content matching
+  byte for byte.
 - [x] 41 new tests (69 total, all passing), including the parser against the real customer
   template and the commit layer against the live local database.
 
@@ -141,21 +143,40 @@ onboarding funnel (5), scorecards (7), `/profile`, `/admin/learners*`, `/team/le
 
 ## Open questions and blockers
 
-- **R2 credentials are not available locally.** `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`
-  exist only in Coolify; `docs/infrastructure.md` records the account id and endpoint but not
-  the keys. The R2 code and `npm run verify:r2` are written and waiting, but the live
-  round-trip is unrun, so chapter notes upload/download is the one part of this work not yet
-  proven against real infrastructure.
+- ~~R2 credentials are not available locally.~~ Resolved 9 September 2026: the keys were
+  copied from Coolify into local `.env.local` and `npm run verify:r2` passed all four steps
+  against the live `nts-lms-content` bucket — upload, presign, a presigned GET fetched over
+  plain HTTPS outside the SDK with matching content, and delete. So the credentials carry
+  object read *and* write permission on the right bucket, and the endpoint form is correct.
+  R2 is no longer an unproven subsystem. Still untested: notes upload through the chapter
+  editor **in production**, which needs content imported there first.
 - **Hindi analysis-band text.** The template has no Hindi column for it. English currently
   fills both fields; either the trainer supplies Hindi text or the template gains a column.
-- **Brevo has still never sent a real email.** Both `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`
-  must be set or `lib/email.ts` silently logs instead of sending.
+- ~~Brevo has still never sent a real email.~~ Resolved 9 September 2026: with both
+  `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` set locally, `lib/email.ts` sent a real password-reset
+  email through the Brevo SDK to a live inbox and returned without throwing — the first time the
+  send branch has ever executed rather than falling back to `console.log`. Brevo accepted the send
+  (HTTP 201) from `no-reply@ntswithankit.com`. Account is on the **free plan: 300 emails/day**,
+  which is a real constraint for bulk learner invitations.
+- **SECURITY: the Brevo API key is published in public DNS.** The `brevo-code` TXT record on
+  `ntswithankit.com` was filled in with the *API key* instead of the domain-verification code, so
+  `dig +short TXT ntswithankit.com` returns the live key to anyone on the internet. The key can send
+  mail as this account and manage contacts and senders — i.e. send phishing from a legitimate domain.
+  **Rotate the key in Brevo, update it in Coolify and `.env.local`, and replace the TXT value** with
+  the real one: `brevo-code:4e37728db9dcaf69657a71d02f5888cf`.
+- **The sender domain is not verified in Brevo** (`verified: false`, `authenticated: false`), because
+  of the same wrong TXT record. DKIM (`brevo1._domainkey`, `brevo2._domainkey`) and DMARC are all
+  correctly published and match what Brevo expects — the verification code is the only thing missing.
+  Mail sends today but is far likelier to land in spam until this is fixed. There is also **no SPF
+  record** on the domain, and no MX, so replies to `no-reply@` will bounce.
 - ~~No account exists in production.~~ Resolved 8 September 2026: `REGISTRATION_CODE` was set in Coolify and a master account was registered at `https://sales.ntswithankit.com/register`. Production sign-in is confirmed working. Note that accounts do not sync between environments — the local and production databases hold separate users.
-- **`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is not set in Coolify.** Next.js encrypts variables
-  captured by inline Server Actions, and the framework docs require a stable key shared
-  across instances for self-hosted deployments. Without it the key is regenerated per build,
-  which can break in-flight action requests across a redeploy and would break outright if the
-  app is ever run as more than one instance.
+- ~~`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is not set in Coolify.~~ Set by the operator on
+  9 September 2026 and a rebuild run, which is what makes it take effect — the key is embedded
+  at build time, so a runtime-only setting would have done nothing. After the redeploy the
+  admin console loads and renders master-only pages. **Still unconfirmed: a server-action
+  *write*.** Everything observed so far is a read, and reads never exercise the key. Creating a
+  company from `/admin/companies` is the outstanding one-click check; "Failed to find Server
+  Action" after a hard refresh would mean the variable is not enabled at buildtime.
 
 Two configuration discrepancies found and fixed while doing this work:
 1. `.env.example` declared `R2_ACCOUNT_ID`, but `docs/infrastructure.md` and Coolify both use
