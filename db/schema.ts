@@ -238,7 +238,12 @@ export const analyses = pgTable("analyses", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
   psychometricScore: real("psychometric_score").notNull(),
-  bandId: uuid("band_id").notNull().references(() => analysisBands.id),
+  // Nullable, and set null rather than cascade, because the band is interpretation while the
+  // score is the learner's actual result. Re-importing the workbook replaces every band row
+  // (lib/import/commit.ts), and a NOT NULL reference made that re-import fail outright once
+  // any learner had completed the psychometric. Losing the commentary is recoverable; losing
+  // the score, or blocking the trainer from ever correcting their content, is not.
+  bandId: uuid("band_id").references(() => analysisBands.id, { onDelete: "set null" }),
   generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

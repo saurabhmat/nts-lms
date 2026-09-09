@@ -6,7 +6,9 @@ import * as XLSX from "xlsx";
 
 import { getDb } from "@/db";
 import {
+  analyses,
   analysisBands as analysisBandsTable,
+  authUsers,
   chapters as chaptersTable,
   courses,
   questionSets,
@@ -75,8 +77,11 @@ async function cleanup() {
     await db.delete(courses).where(eq(courses.id, courseId));
   }
   await db.delete(questionSets).where(inArray(questionSets.type, ["psychometric", "setup"]));
+  await db.delete(authUsers).where(eq(authUsers.id, ANALYSIS_LEARNER));
   await db.delete(analysisBandsTable);
 }
+
+const ANALYSIS_LEARNER = "import-test-analysis-learner";
 
 describe("commitWorkbook (integration)", () => {
   beforeAll(cleanup);
@@ -201,6 +206,50 @@ describe("commitWorkbook (integration)", () => {
       { key: "A", en: "A en", hi: "A hi" },
       { key: "B", en: "B en", hi: "B hi" },
     ]);
+  });
+
+  // Regression: analysis_bands are replaced wholesale on every import, and learners' analyses
+  // rows point at them. When band_id was NOT NULL with no delete rule, the second import threw
+  // a foreign key violation and rolled back the whole thing -- so a trainer could never correct
+  // their content once anyone had taken the psychometric.
+  it("re-imports successfully after a learner has a recorded analysis", async () => {
+    await db.insert(authUsers).values({
+      id: ANALYSIS_LEARNER,
+      name: "Analysis Learner",
+      email: "import-test-analysis@example.com",
+    });
+
+    const before = await db.select().from(analysisBandsTable).orderBy(analysisBandsTable.minPct);
+    const developing = before.find((band) => band.label === "Developing")!;
+
+    // 30% sits inside a band; 50.5% falls in the gap the fixture's 0-50 / 51-100 bands leave.
+    await db.insert(analyses).values([
+      { userId: ANALYSIS_LEARNER, psychometricScore: 30, bandId: developing.id },
+      { userId: ANALYSIS_LEARNER, psychometricScore: 50.5, bandId: developing.id },
+    ]);
+
+    await expect(commitWorkbook(master, buildWorkbook())).resolves.toBeDefined();
+
+    const rows = await db
+      .select()
+      .from(analyses)
+      .where(eq(analyses.userId, ANALYSIS_LEARNER))
+      .orderBy(analyses.psychometricScore);
+
+    // The scores survive: they are the learner's real result, not commentary.
+    expect(rows.map((row) => row.psychometricScore)).toEqual([30, 50.5]);
+
+    const after = await db.select().from(analysisBandsTable);
+    const covered = rows.find((row) => row.psychometricScore === 30)!;
+    const uncovered = rows.find((row) => row.psychometricScore === 50.5)!;
+
+    // Re-pointed at the freshly imported band, not the deleted one.
+    expect(covered.bandId).not.toBeNull();
+    expect(covered.bandId).not.toBe(developing.id);
+    expect(after.find((band) => band.id === covered.bandId)?.label).toBe("Developing");
+
+    // No new band covers 50.5, so it loses its commentary rather than blocking the import.
+    expect(uncovered.bandId).toBeNull();
   });
 
   it("fills Hindi band text from the English column the template provides", async () => {

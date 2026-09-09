@@ -6,20 +6,44 @@ import { useState } from "react";
 
 import type { AttemptState } from "@/lib/engine";
 
-import { saveAnswerAction, submitAttemptAction } from "./actions";
+// One player for both assessments the engine drives: chapter tests and the onboarding
+// psychometric. They differ only in wording and where they send the learner afterwards, so
+// the actions are passed in as props (Server Actions are valid props for a Client Component)
+// rather than imported, which keeps this component unaware of which flow it is serving.
 
 type Language = "en" | "hi";
 
-export function TestPlayer({
+export type SaveAnswerAction = (
+  attemptId: string,
+  questionId: string,
+  selectedOption: string,
+  nextQuestionIndex: number,
+) => Promise<{ ok: true } | { ok: false; message: string }>;
+
+export type SubmitAttemptAction = (
+  attemptId: string,
+) => Promise<{ ok: true; attemptId: string } | { ok: false; message: string }>;
+
+export function AssessmentPlayer({
   state,
-  chapterId,
-  chapterTitle,
+  title,
+  subtitle,
   initialLanguage,
+  submitLabel,
+  doneHref,
+  appendAttemptParam = false,
+  saveAnswer,
+  submitAttempt,
 }: {
   state: AttemptState;
-  chapterId: string;
-  chapterTitle: string;
+  title: string;
+  subtitle?: string;
   initialLanguage: Language;
+  submitLabel: string;
+  doneHref: string;
+  appendAttemptParam?: boolean;
+  saveAnswer: SaveAnswerAction;
+  submitAttempt: SubmitAttemptAction;
 }) {
   const router = useRouter();
 
@@ -49,7 +73,7 @@ export function TestPlayer({
 
     setPending(true);
     try {
-      const result = await saveAnswerAction(state.attemptId, question.id, optionKey, index);
+      const result = await saveAnswer(state.attemptId, question.id, optionKey, index);
       if (!result.ok) {
         setAnswers(previous);
         setError(result.message);
@@ -66,7 +90,7 @@ export function TestPlayer({
 
     // Persist the resume point so a learner who closes the tab returns to this question.
     if (selected) {
-      void saveAnswerAction(state.attemptId, question.id, selected, clamped);
+      void saveAnswer(state.attemptId, question.id, selected, clamped);
     }
   }
 
@@ -75,15 +99,15 @@ export function TestPlayer({
     setError(null);
     setPending(true);
     try {
-      const result = await submitAttemptAction(state.attemptId);
+      const result = await submitAttempt(state.attemptId);
       if (result.ok) {
-        router.push(`/course/${chapterId}/test/result?attempt=${result.attemptId}`);
+        router.push(appendAttemptParam ? `${doneHref}?attempt=${result.attemptId}` : doneHref);
       } else {
         setError(result.message);
         setPending(false);
       }
     } catch {
-      setError("Something went wrong submitting your test. Please try again.");
+      setError("Something went wrong submitting your answers. Please try again.");
       setPending(false);
     }
   }
@@ -92,9 +116,10 @@ export function TestPlayer({
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-900">{chapterTitle}</p>
+          <p className="truncate text-sm font-medium text-slate-900">{title}</p>
           <p className="text-xs text-slate-500">
-            Question {index + 1} of {total} · attempt {state.attemptNo}
+            Question {index + 1} of {total}
+            {subtitle ? ` · ${subtitle}` : ""}
           </p>
         </div>
 
@@ -186,7 +211,7 @@ export function TestPlayer({
             className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Submit test
+            {submitLabel}
           </button>
         ) : (
           <button

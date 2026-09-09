@@ -301,7 +301,8 @@ describe("psychometric scoring", () => {
 
     const [analysis] = await db.select().from(analyses).where(eq(analyses.userId, learnerId));
     expect(analysis).toBeDefined();
-    const [band] = await db.select().from(analysisBands).where(eq(analysisBands.id, analysis.bandId));
+    expect(analysis.bandId).not.toBeNull();
+    const [band] = await db.select().from(analysisBands).where(eq(analysisBands.id, analysis.bandId!));
     expect(band.label).toBe("Strong");
   });
 });

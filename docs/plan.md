@@ -134,12 +134,87 @@ suites against one shared local Postgres database, and several assert on global 
 clean whole tables; running files in parallel let one suite's fixtures leak into another's
 assertions. This surfaced as soon as a second suite touched the same tables.
 
-Not built yet, deliberately: the onboarding gate. Spec §5 redirects a learner with
-`onboarding_state != complete` to `/onboarding/*`, but that funnel is step 5 and does not
-exist, so enforcing the gate now would make the course unreachable for everyone. The comment
-in `app/course/layout.tsx` marks exactly where it goes. Steps still outstanding: the
-onboarding funnel (5), scorecards (7), `/profile`, `/admin/learners*`, `/team/learners/[userId]`,
-`/admin/questions`, `/admin/analysis-bands` and `/admin/settings`.
+The onboarding gate this section left deliberately unwired is now built -- see the next
+section. Steps still outstanding: scorecards (7), `/profile`, `/admin/learners*`,
+`/team/learners/[userId]`, `/admin/questions`, `/admin/analysis-bands` and `/admin/settings`.
+
+## The onboarding funnel (spec §8 step 5)
+
+The last thing standing between a learner and a complete journey: psychometric ->
+setup questionnaire -> analysis, with the course gated until it is done.
+
+- [x] `db/seed-content.ts` (`npm run db:seed:content`) -- **placeholder** content so the funnel
+  could be built and exercised before the trainer's workbook arrives: 10 bilingual sales
+  psychometric questions scored 0-3 by trait, a 6-question setup questionnaire (3 free-text),
+  and 4 analysis bands with both English *and* Hindi body text. It writes to the same tables the
+  spreadsheet importer writes to, so importing the real `Psychometric` and `Setup_Questionnaire`
+  tabs **replaces** this rather than sitting alongside it. None of this content is meant to
+  survive to launch; the trainer will replace all of it.
+- [x] The seed refuses to overwrite content learners have already answered unless run with
+  `--force`, the same safeguard the importer has.
+- [x] `lib/onboarding.ts` -- state transitions, setup-answer persistence, analysis read-back.
+  `advanceOnboardingState` only ever moves forward, so a replayed POST or a double-clicked
+  button cannot undo a learner's progress.
+- [x] `/onboarding/psychometric` -- runs on the shared question engine, so resume, ownership
+  checks and the EN/HI toggle came for free. Re-entering after completing it redirects rather
+  than starting a second attempt that would overwrite the analysis already being shown.
+- [x] `/onboarding/questionnaire` -- the one part that needed its own path, because the setup
+  questionnaire is unscored and may be free text, so answers go to `setup_answers` and never
+  through the scored `responses` table (the amendment in spec §4). Answers are upserted, so
+  returning to the page edits rather than duplicating. Deliberately one page rather than
+  one-question-per-screen: spec §5 only requires that for the assessment.
+- [x] `/onboarding/analysis` -- score, band label and the band's English and Hindi text, then a
+  "Start the course" action that sets `onboarding_state = complete`.
+- [x] The gate in `app/course/layout.tsx` is now live, and login sends an unfinished learner to
+  `/onboarding` instead of a course they would only be bounced out of.
+- [x] `components/assessment-player.tsx` -- the chapter-test player, extracted so the
+  psychometric did not duplicate ~180 lines. The two flows differ only in wording and
+  destination, so the actions are passed in as props rather than imported. The chapter test now
+  renders through it and was re-verified afterwards.
+- [x] 15 new tests (104 total, all passing), plus lint and a clean production build.
+
+**The gate is conditional on content existing, by design.** With no psychometric questions
+loaded -- exactly what production looks like today -- gating would redirect every learner into
+a funnel they cannot finish and lock them out of the course entirely. `isOnboardingAvailable()`
+makes the gate switch itself on when content lands. This was verified by deleting the
+psychometric questions and confirming a `pending` learner still reaches `/course` normally.
+
+Verified end to end over the real HTTP wire protocol, not just through unit tests: two full
+runs by two learners. One scored 40.0% and one 100%, chosen to land on band boundaries. Every
+out-of-order step redirects to the step the learner is actually on; `/course` was refused
+before completion and served after; the questionnaire was submitted through its real no-JS
+server-action form, and refused -- with the previously saved answers untouched -- for an
+incomplete submission, an option key the question does not offer, and whitespace-only free
+text. A master is redirected to `/admin` rather than into the funnel, and an anonymous request
+goes to `/login`. Login was driven through the real form and routed by onboarding state.
+
+Two fixes to existing code that this work forced:
+
+1. **A latent bug in the spreadsheet importer that would have broken re-imports in production.**
+   `lib/import/commit.ts` deletes every `analysis_bands` row on each import, but `analyses.band_id`
+   was `NOT NULL` with no delete rule. Nothing had ever created an `analyses` row before this
+   funnel existed, so it had never fired. Once a single learner completed the psychometric, the
+   trainer's next import -- correcting a typo, say -- would have failed with a foreign key
+   violation and rolled back entirely, with no way to fix their own content. `band_id` is now
+   nullable with `ON DELETE SET NULL` (migration `0004_boring_kinsey_walden.sql`), and the
+   importer inserts the new bands, re-points every existing analysis at whichever new band covers
+   its score, and only then deletes the old rows. A score no new band covers loses its commentary
+   rather than blocking the import -- the learner's score is their real result and is never
+   discarded. Pinned by a regression test that imports, records analyses, and re-imports.
+2. **Band matching was non-deterministic at a boundary.** Bands normally share edges (0-40,
+   40-60), so a score of exactly 40 matched two rows and `limit 1` picked whichever Postgres
+   returned first. It now orders by `min_pct` descending, resolving ties upward, in the learner's
+   favour. The 40.0% walkthrough run confirmed it lands in `Emerging` rather than `Developing`.
+
+Also changed: the engine now writes the `analyses` row even when no band covers the score,
+instead of discarding it. The score is the learner's actual result; missing commentary is the
+trainer's content gap, and the analysis screen already renders that case.
+
+Note for anyone running the suite locally: `lib/onboarding.test.ts` and `lib/import/commit.test.ts`
+delete all `psychometric` and `setup` question sets as fixtures, so `npm run db:seed:content`
+needs re-running afterwards to get the dev content back. Several suites also assert on global
+counts, so leftover course rows from manual testing will fail them -- clean up fixtures before
+running the suite.
 
 ## Open questions and blockers
 
@@ -150,8 +225,12 @@ onboarding funnel (5), scorecards (7), `/profile`, `/admin/learners*`, `/team/le
   object read *and* write permission on the right bucket, and the endpoint form is correct.
   R2 is no longer an unproven subsystem. Still untested: notes upload through the chapter
   editor **in production**, which needs content imported there first.
-- **Hindi analysis-band text.** The template has no Hindi column for it. English currently
-  fills both fields; either the trainer supplies Hindi text or the template gains a column.
+- **Hindi analysis-band text.** The template has no Hindi column for it, so the importer puts
+  the English text in both fields. This is no longer theoretical: `/onboarding/analysis` renders
+  `body_hi` directly beneath `body_en`, so once the real workbook is imported a Hindi learner
+  finishes their assessment and reads the same English paragraph twice. The placeholder seed has
+  genuine Hindi text and shows what it should look like. Either the trainer supplies Hindi text
+  or the template gains a column -- needed before content load, not after.
 - ~~Brevo has still never sent a real email.~~ Resolved 9 September 2026: with both
   `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` set locally, `lib/email.ts` sent a real password-reset
   email through the Brevo SDK to a live inbox and returned without throwing — the first time the

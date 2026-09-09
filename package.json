@@ -11,6 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
     "db:seed": "tsx --env-file=.env.local db/seed.ts",
+    "db:seed:content": "tsx --env-file=.env.local db/seed-content.ts",
     "test": "vitest run",
     "verify:r2": "tsx --env-file=.env.local --tsconfig tsconfig.json scripts/verify-r2.ts",
     "db:migrate:prod": "node db/migrate.mjs"

@@ -333,18 +333,26 @@ async function recordChapterProgress(userId: string, chapterId: string, score: n
 async function recordPsychometricAnalysis(userId: string, percentage: number) {
   const db = getDb();
 
+  // Bands are written by the trainer (spreadsheet import or seed) and typically share their
+  // boundaries -- 0-40, 40-60, 60-80 -- so a score of exactly 60 matches two rows. Ordering by
+  // min_pct descending makes that deterministic and resolves the tie upward, in the learner's
+  // favour, rather than leaving it to whatever order Postgres happens to return.
   const [band] = await db
     .select()
     .from(analysisBands)
     .where(and(sql`${analysisBands.minPct} <= ${percentage}`, sql`${analysisBands.maxPct} >= ${percentage}`))
+    .orderBy(desc(analysisBands.minPct))
     .limit(1);
 
-  // No matching band means the trainer's bands do not cover this score. The attempt is
-  // still recorded; the analysis screen handles a missing analysis rather than failing
-  // the submission the learner just completed.
-  if (!band) return;
-
-  await db.insert(analyses).values({ userId, psychometricScore: percentage, bandId: band.id });
+  // No matching band means the trainer's bands do not cover this score. The analysis is still
+  // written, with no band: the learner's score is their real result and must not be discarded
+  // because the commentary for its range happens to be missing. The analysis screen renders
+  // the score and says the written analysis is not available yet.
+  await db.insert(analyses).values({
+    userId,
+    psychometricScore: percentage,
+    bandId: band?.id ?? null,
+  });
 }
 
 /**

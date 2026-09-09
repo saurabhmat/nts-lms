@@ -6,7 +6,9 @@ import { getChapterForLearner } from "@/lib/course";
 import { startOrResumeAttempt } from "@/lib/engine";
 import { getSessionScope } from "@/lib/session";
 
-import { TestPlayer } from "./player";
+import { AssessmentPlayer } from "@/components/assessment-player";
+
+import { saveAnswerAction, submitAttemptAction } from "./actions";
 
 export default async function TestPage({ params }: { params: Promise<{ chapterId: string }> }) {
   const { chapterId } = await params;
@@ -32,11 +34,16 @@ export default async function TestPage({ params }: { params: Promise<{ chapterId
   const initialLanguage = session?.user.preferredLanguage === "hi" ? "hi" : "en";
 
   return (
-    <TestPlayer
+    <AssessmentPlayer
       state={state}
-      chapterId={chapterId}
-      chapterTitle={`Chapter ${detail.chapter.order}: ${detail.chapter.titleEn}`}
+      title={`Chapter ${detail.chapter.order}: ${detail.chapter.titleEn}`}
+      subtitle={`attempt ${state.attemptNo}`}
       initialLanguage={initialLanguage}
+      submitLabel="Submit test"
+      doneHref={`/course/${chapterId}/test/result`}
+      appendAttemptParam
+      saveAnswer={saveAnswerAction}
+      submitAttempt={submitAttemptAction}
     />
   );
 }

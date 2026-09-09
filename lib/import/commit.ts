@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
+  analyses,
   analysisBands as analysisBandsTable,
   attempts,
   chapters as chaptersTable,
@@ -203,19 +204,58 @@ export async function commitWorkbook(
     }
 
     if (parsed.analysisBands.length > 0) {
-      await tx.delete(analysisBandsTable);
-      await tx.insert(analysisBandsTable).values(
-        parsed.analysisBands.map((band) => ({
-          minPct: band.minPct,
-          maxPct: band.maxPct,
-          label: band.label,
-          // The template supplies a single analysis column. Until the trainer provides
-          // Hindi band text, the English text stands in for both -- body_hi is NOT NULL
-          // and a Hindi learner must still see something after the assessment.
-          bodyEn: band.body,
-          bodyHi: band.body,
-        })),
+      // Bands are replaced wholesale, but learners' `analyses` rows point at them. Insert the
+      // new bands first, re-point every existing analysis at whichever new band now covers its
+      // score, and only then drop the old rows. Deleting first made a re-import fail outright
+      // with a foreign key violation as soon as any learner had completed the psychometric --
+      // which is precisely when a trainer is most likely to be correcting their content.
+      const oldBandIds = (await tx.select({ id: analysisBandsTable.id }).from(analysisBandsTable)).map(
+        (band) => band.id,
       );
+
+      const newBands = await tx
+        .insert(analysisBandsTable)
+        .values(
+          parsed.analysisBands.map((band) => ({
+            minPct: band.minPct,
+            maxPct: band.maxPct,
+            label: band.label,
+            // The template supplies a single analysis column. Until the trainer provides
+            // Hindi band text, the English text stands in for both -- body_hi is NOT NULL
+            // and a Hindi learner must still see something after the assessment.
+            bodyEn: band.body,
+            bodyHi: band.body,
+          })),
+        )
+        .returning({
+          id: analysisBandsTable.id,
+          minPct: analysisBandsTable.minPct,
+          maxPct: analysisBandsTable.maxPct,
+        });
+
+      if (oldBandIds.length > 0) {
+        const affected = await tx
+          .select({ id: analyses.id, score: analyses.psychometricScore })
+          .from(analyses)
+          .where(inArray(analyses.bandId, oldBandIds));
+
+        for (const row of affected) {
+          // Highest matching band wins, the same tie-break the engine uses at a shared
+          // boundary. A score no new band covers becomes null: the analysis screen renders
+          // that as "no written analysis for this range yet", and the score is never lost.
+          const match = newBands
+            .filter((band) => band.minPct <= row.score && band.maxPct >= row.score)
+            .sort((a, b) => b.minPct - a.minPct)[0];
+
+          await tx
+            .update(analyses)
+            .set({ bandId: match?.id ?? null })
+            .where(eq(analyses.id, row.id));
+        }
+
+        await tx.delete(analysisBandsTable).where(inArray(analysisBandsTable.id, oldBandIds));
+      }
+
       summary.analysisBands = parsed.analysisBands.length;
     }
 

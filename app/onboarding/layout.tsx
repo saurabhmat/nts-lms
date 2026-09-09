@@ -1,29 +1,18 @@
-import { GraduationCap, LogOut } from "lucide-react";
-import Link from "next/link";
+import { LogOut } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
-import { getOnboardingState, isOnboardingAvailable } from "@/lib/onboarding";
 import { getSessionScope } from "@/lib/session";
 import { signOutAction } from "@/lib/session-actions";
 
-export default async function CourseLayout({ children }: { children: React.ReactNode }) {
+// Onboarding belongs to learners. A master or company admin has no onboarding state to
+// complete, so they are sent to their own landing page rather than through this funnel.
+export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const scope = await getSessionScope();
   if (!scope) redirect("/login");
-
-  // The onboarding gate of docs/spec.md §5 and §7: no chapter is reachable until the learner
-  // has finished onboarding. It applies only to learners -- a master or company admin viewing
-  // the course has no onboarding state to complete.
-  //
-  // It is also conditional on onboarding content existing. A database with no psychometric
-  // questions loaded -- which is what production looks like before the trainer's workbook is
-  // imported -- would otherwise redirect every learner into a funnel they cannot finish and
-  // lock them out of the course entirely. The gate switches itself on when content lands.
-  if (scope.role === "learner") {
-    const state = await getOnboardingState(scope.userId);
-    if (state !== "complete" && (await isOnboardingAvailable())) redirect("/onboarding");
-  }
+  if (scope.role === "master") redirect("/admin");
+  if (scope.role === "company_admin") redirect("/team");
 
   const session = await auth.api.getSession({ headers: await headers() });
 
@@ -31,21 +20,14 @@ export default async function CourseLayout({ children }: { children: React.React
     <div className="flex min-h-full flex-1 flex-col bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <Link href="/course" className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
               N
             </span>
             <span className="text-sm font-semibold tracking-tight text-slate-900">NTS Sales Mastery</span>
-          </Link>
+          </div>
 
           <div className="flex items-center gap-4">
-            <Link
-              href="/course"
-              className="flex items-center gap-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
-            >
-              <GraduationCap className="h-4 w-4" strokeWidth={1.75} />
-              My course
-            </Link>
             <span className="hidden text-sm text-slate-400 sm:inline">{session?.user.name}</span>
             <form action={signOutAction}>
               <button
